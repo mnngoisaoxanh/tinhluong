@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#188038">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Tính Lương - Trường MN Ngôi Sao Xanh</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', system-ui, Arial, sans-serif; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #e8f5e9; }
+    #app-frame { position: fixed; inset: 0; width: 100%; height: 100%; border: none; display: block; background: #fff; }
+
+    /* ===== Màn hình chờ ===== */
+    #loader {
+      position: fixed; inset: 0; z-index: 10; overflow: hidden;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 16px; padding: 24px; text-align: center;
+      background: linear-gradient(160deg, #e8f5e9 0%, #d7f0ff 100%);
+      transition: opacity .45s, transform .45s;
+    }
+    #loader.hide { opacity: 0; transform: scale(1.03); pointer-events: none; }
+
+    /* Sao nhấp nháy nền */
+    .sky i {
+      position: absolute; font-style: normal; opacity: .0;
+      animation: twinkle 3s ease-in-out infinite;
+    }
+    @keyframes twinkle { 0%,100% { opacity: 0; transform: scale(.6) } 50% { opacity: .85; transform: scale(1.15) } }
+
+    /* Đồng xu nhảy */
+    .stage { position: relative; width: 120px; height: 120px; display: flex; align-items: flex-end; justify-content: center; }
+    .coin {
+      font-size: 64px; line-height: 1;
+      animation: bounce 1s cubic-bezier(.3,.7,.4,1) infinite;
+      filter: drop-shadow(0 6px 6px rgba(0,0,0,.15));
+    }
+    .shadow {
+      position: absolute; bottom: 0; width: 56px; height: 10px; border-radius: 50%;
+      background: rgba(0,0,0,.14); animation: shadow 1s cubic-bezier(.3,.7,.4,1) infinite;
+    }
+    @keyframes bounce {
+      0%,100% { transform: translateY(0) rotateY(0) }
+      50%     { transform: translateY(-46px) rotateY(180deg) }
+    }
+    @keyframes shadow { 0%,100% { transform: scale(1); opacity: .22 } 50% { transform: scale(.55); opacity: .08 } }
+
+    #school { color: #188038; font-weight: 800; font-size: 1.05rem; letter-spacing: .4px; }
+    #loader-text {
+      min-height: 3em; max-width: 340px; color: #334155; font-size: .98rem; font-weight: 600; line-height: 1.45;
+      transition: opacity .3s;
+    }
+    #loader-text.fade { opacity: 0; }
+
+    /* Thanh tiến độ giả (chạy chậm dần, đầy khi tải xong) */
+    .bar { width: min(280px, 78vw); height: 12px; border-radius: 999px; background: #fff; box-shadow: inset 0 1px 3px rgba(0,0,0,.15); overflow: hidden; }
+    #bar-fill {
+      height: 100%; width: 4%; border-radius: 999px;
+      background: linear-gradient(90deg, #34a853, #7ed957, #34a853); background-size: 200% 100%;
+      animation: shine 1.2s linear infinite; transition: width .6s ease-out;
+    }
+    @keyframes shine { to { background-position: -200% 0 } }
+    #pct { font-size: .8rem; color: #5f6b64; font-weight: 600; }
+
+    #loader-sub { font-size: .82rem; color: #5f6b64; max-width: 340px; line-height: 1.45; display: none; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+    .btn {
+      display: none; height: 40px; padding: 0 22px; border: none; border-radius: 999px;
+      background: #188038; color: #fff; font-weight: 600; font-size: .92rem; cursor: pointer;
+    }
+    .btn.alt { background: #e2e8f0; color: #334155; }
+
+    #loader.err .stage, #loader.err .bar, #loader.err #pct { display: none; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .coin, .shadow, .sky i, #bar-fill { animation: none; }
+      .sky i { opacity: .5; }
+    }
+  </style>
+</head>
+<body>
+  <iframe id="app-frame" title="Tính lương"
+          allow="clipboard-write; fullscreen"
+          referrerpolicy="no-referrer-when-downgrade"></iframe>
+
+  <div id="loader">
+    <div class="sky" id="sky"></div>
+    <div class="stage"><div class="coin">💰</div><div class="shadow"></div></div>
+    <div id="school">⭐ NGÔI SAO XANH ⭐</div>
+    <div id="loader-text">Đang mở hệ thống tính lương...</div>
+    <div class="bar"><div id="bar-fill"></div></div>
+    <div id="pct">0%</div>
+    <div id="loader-sub">Mất hơi lâu hơn bình thường. Nếu vẫn trắng trang, kiểm tra mạng rồi bấm "Tải lại".
+      Nếu báo lỗi quyền truy cập, hãy kiểm tra Web app đã Deploy với "Who has access: Anyone".</div>
+    <div class="row">
+      <button class="btn" id="btn-retry" onclick="taiLai()">↻ Tải lại</button>
+      <button class="btn alt" id="btn-open" onclick="moTab()">Mở trong tab mới</button>
+    </div>
+  </div>
+
+  <script>
+    // Link Web app Apps Script (bản Deploy tính lương)
+    const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwi6-rBLk0FgGjrDG09trZmERMhssBdmDCsd4GQ7S5IQglYIpMfiXOX-lpitizRnU2N4w/exec";
+    const TIMEOUT_MS = 25000;   // quá thời gian này mà chưa tải xong thì hiện nút Tải lại
+
+    // Câu chờ luân phiên cho đỡ chán
+    const MESSAGES = [
+      "💰 Đang đếm tiền lương cho các cô...",
+      "☕ Đang đánh thức máy chủ Google dậy pha cà phê...",
+      "📋 Đang xếp hàng các cô theo thứ tự...",
+      "🧮 Đang bấm máy tính ngày công, nghỉ không phép là trừ nha!",
+      "🖨 Đang chuẩn bị phiếu lương thơm mùi giấy mới...",
+      "🐢 Máy chủ đang chạy... hơi chậm nhưng chắc chắn!",
+      "🎁 Đang gói thưởng cuối tháng...",
+      "✨ Sắp xong rồi, chờ xíu nha!"
+    ];
+
+    const frame  = document.getElementById('app-frame');
+    const loader = document.getElementById('loader');
+    const txt    = document.getElementById('loader-text');
+    const fill   = document.getElementById('bar-fill');
+    const pctEl  = document.getElementById('pct');
+    let timer = null, msgTimer = null, barTimer = null, msgIdx = 0, pct = 4, startAt = 0;
+
+    // Rắc ngôi sao nền
+    (function () {
+      const sky = document.getElementById('sky'), icons = ['⭐', '✨', '🌟'];
+      for (let i = 0; i < 16; i++) {
+        const s = document.createElement('i');
+        s.textContent = icons[i % icons.length];
+        s.style.left = (Math.random() * 96) + '%';
+        s.style.top = (Math.random() * 92) + '%';
+        s.style.fontSize = (12 + Math.random() * 18) + 'px';
+        s.style.animationDelay = (Math.random() * 3) + 's';
+        s.style.animationDuration = (2.4 + Math.random() * 2.4) + 's';
+        sky.appendChild(s);
+      }
+    })();
+
+    function setPct(p) {
+      pct = Math.min(100, p);
+      fill.style.width = pct + '%';
+      pctEl.textContent = Math.floor(pct) + '%';
+    }
+    function nextMsg() {
+      txt.classList.add('fade');
+      setTimeout(function () {
+        txt.textContent = MESSAGES[msgIdx % MESSAGES.length];
+        msgIdx++;
+        txt.classList.remove('fade');
+      }, 280);
+    }
+    function stopTimers() { clearTimeout(timer); clearInterval(msgTimer); clearInterval(barTimer); }
+
+    function hienLoi() {
+      stopTimers();
+      loader.classList.add('err');
+      txt.textContent = '⚠️ Chưa tải xong hệ thống';
+      document.getElementById('loader-sub').style.display = 'block';
+      document.getElementById('btn-retry').style.display = 'inline-flex';
+      document.getElementById('btn-open').style.display = 'inline-flex';
+      loader.classList.remove('hide');
+    }
+
+    function batDau() {
+      stopTimers();
+      loader.classList.remove('hide', 'err');
+      document.getElementById('loader-sub').style.display = 'none';
+      document.getElementById('btn-retry').style.display = 'none';
+      document.getElementById('btn-open').style.display = 'none';
+      msgIdx = 0; txt.textContent = MESSAGES[msgIdx++]; setPct(4); startAt = Date.now();
+      msgTimer = setInterval(nextMsg, 2600);
+      // Tiến độ giả: nhanh lúc đầu rồi chậm dần, không bao giờ vượt 92% khi chưa tải xong
+      barTimer = setInterval(function () {
+        const left = 92 - pct;
+        if (left > 0.3) setPct(pct + left * 0.045);
+      }, 250);
+      timer = setTimeout(hienLoi, TIMEOUT_MS);
+      frame.src = GAS_WEB_APP_URL;
+    }
+
+    frame.addEventListener('load', function () {
+      if (!frame.src || frame.src === 'about:blank') return;
+      stopTimers();
+      txt.textContent = '🎉 Xong rồi! Mời nhập mật khẩu';
+      setPct(100);
+      setTimeout(function () { loader.classList.add('hide'); }, 500);
+    });
+
+    function taiLai() { frame.src = 'about:blank'; setTimeout(batDau, 100); }
+    function moTab() { window.open(GAS_WEB_APP_URL, '_blank', 'noopener'); }
+
+    batDau();
+  </script>
+</body>
+</html>
